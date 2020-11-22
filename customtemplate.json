@@ -1,0 +1,171 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "newstorType": {
+            "type": "string",
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [
+                "Standard_LRS",
+                "Standard_ZRS",
+                "Standard_GRS",
+                "Standard_RAGRS",
+                "Premium_LRS"
+            ]
+        },
+        "newvmName": {
+            "type": "string",
+            "minLength": 1
+        },
+        "newvmAdminUserName": {
+            "type": "string",
+            "minLength": 1
+        },
+        "newvmAdminPassword": {
+            "type": "securestring"
+        },
+        "newvmWindowsOSVersion": {
+            "type": "string",
+            "defaultValue": "2012-R2-Datacenter",
+            "allowedValues": [
+                "2008-R2-SP1",
+                "2012-Datacenter",
+                "2012-R2-Datacenter",
+                "Windows-Server-Technical-Preview"
+            ]
+        }
+    },
+    "resources": [
+        {
+            "name": "[variables('newstorName')]",
+            "type": "Microsoft.Storage/storageAccounts",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "newstor"
+            },
+            "properties": {
+                "accountType": "[parameters('newstorType')]"
+            }
+        },
+        {
+            "name": "newvnet",
+            "type": "Microsoft.Network/virtualNetworks",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [],
+            "tags": {
+                "displayName": "newvnet"
+            },
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('newvnetPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('newvnetSubnet1Name')]",
+                        "properties": {
+                            "addressPrefix": "[variables('newvnetSubnet1Prefix')]"
+                        }
+                    },
+                    {
+                        "name": "[variables('newvnetSubnet2Name')]",
+                        "properties": {
+                            "addressPrefix": "[variables('newvnetSubnet2Prefix')]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[variables('newvmNicName')]",
+            "type": "Microsoft.Network/networkInterfaces",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', 'newvnet')]"
+            ],
+            "tags": {
+                "displayName": "newvmNic"
+            },
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('newvmSubnetRef')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[parameters('newvmName')]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2015-06-15",
+            "dependsOn": [
+                "[concat('Microsoft.Storage/storageAccounts/', variables('newstorName'))]",
+                "[concat('Microsoft.Network/networkInterfaces/', variables('newvmNicName'))]"
+            ],
+            "tags": {
+                "displayName": "newvm"
+            },
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[variables('newvmVmSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[parameters('newvmName')]",
+                    "adminUsername": "[parameters('newvmAdminUsername')]",
+                    "adminPassword": "[parameters('newvmAdminPassword')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[variables('newvmImagePublisher')]",
+                        "offer": "[variables('newvmImageOffer')]",
+                        "sku": "[parameters('newvmWindowsOSVersion')]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "name": "newvmOSDisk",
+                        "vhd": {
+                            "uri": "[concat('http://', variables('newstorName'), '.blob.core.windows.net/', variables('newvmStorageAccountContainerName'), '/', variables('newvmOSDiskName'), '.vhd')]"
+                        },
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage"
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('newvmNicName'))]"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "variables": {
+        "newstorName": "[concat('newstor', uniqueString(resourceGroup().id))]",
+        "newvnetPrefix": "10.0.0.0/16",
+        "newvnetSubnet1Name": "Subnet-1",
+        "newvnetSubnet1Prefix": "10.0.0.0/24",
+        "newvnetSubnet2Name": "Subnet-2",
+        "newvnetSubnet2Prefix": "10.0.1.0/24",
+        "newvmImagePublisher": "MicrosoftWindowsServer",
+        "newvmImageOffer": "WindowsServer",
+        "newvmOSDiskName": "newvmOSDisk",
+        "newvmVmSize": "Standard_D1",
+        "newvmVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'newvnet')]",
+        "newvmSubnetRef": "[concat(variables('newvmVnetID'), '/subnets/', variables('newvnetSubnet1Name'))]",
+        "newvmStorageAccountContainerName": "vhds",
+        "newvmNicName": "[concat(parameters('newvmName'), 'NetworkInterface')]"
+    }
+}
